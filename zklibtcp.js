@@ -9,18 +9,20 @@ const { createTCPHeader,
   decodeRecordData40,
   decodeRecordRealTimeLog52,
   checkNotEventTCP,
-  decodeTCPHeader } = require('./utils')
+  decodeTCPHeader,
+  make_commkey } = require('./utils')
 
-const { log } = require('./helpers/errorLog')
+const { log } = require('./helpers/errorLog');
 
 class ZKLibTCP {
-  constructor(ip, port, timeout) {
+  constructor(ip, port, timeout, password = 0) {
     this.ip = ip
     this.port = port
     this.timeout = timeout
     this.sessionId = null
     this.replyId = 0
     this.socket = null
+    this.password = password
   }
 
 
@@ -57,10 +59,39 @@ class ZKLibTCP {
       try {
         const reply = await this.executeCmd(COMMANDS.CMD_CONNECT, '')
         if (reply) {
+          // check if authentication required
+          const is_auth_required = REQUEST_DATA.NEED_AUTHENTICATION.compare(reply.slice(0, 2), 0, 2, 0, 2)
+          if (is_auth_required === 0) {
+            try {
+              await this.authenticate()
+              resolve(true)
+            } catch (error) {
+              reject(error)
+            }
+          }
+
+          // authentication not required
           resolve(true)
         } else {
-
           reject(new Error('NO_REPLY_ON_CMD_CONNECT'))
+        }
+      } catch (err) {
+        reject(err)
+      }
+    })
+  }
+
+  authenticate() {
+    console.log("Trying to authenticate");
+    return new Promise(async (resolve, reject) => {
+      try {
+        const command_str = make_commkey(this.password, this.sessionId)
+        const reply = await this.executeCmd(COMMANDS.CMD_AUTH, command_str)
+        if (reply) {
+          console.log("Authenticated!!");
+          resolve(true)
+        } else {
+          reject(new Error('NO_REPLY_ON_CMD_AUTH'))
         }
       } catch (err) {
         reject(err)
@@ -121,14 +152,14 @@ class ZKLibTCP {
       const handleOnData = (data) => {
         replyBuffer = Buffer.concat([replyBuffer, data])
         if (checkNotEventTCP(data)) return;
-        clearTimeout(timer)   
-        const header = decodeTCPHeader(replyBuffer.subarray(0,16));
+        clearTimeout(timer)
+        const header = decodeTCPHeader(replyBuffer.subarray(0, 16));
 
-        if(header.commandId === COMMANDS.CMD_DATA){
-          timer = setTimeout(()=>{
+        if (header.commandId === COMMANDS.CMD_DATA) {
+          timer = setTimeout(() => {
             internalCallback(replyBuffer)
           }, 1000)
-        }else{
+        } else {
           timer = setTimeout(() => {
             reject(new Error('TIMEOUT_ON_RECEIVING_REQUEST_DATA'))
           }, this.timeout)
@@ -141,7 +172,7 @@ class ZKLibTCP {
       }
 
 
-      
+
       this.socket.on('data', handleOnData)
 
       this.socket.write(msg, null, err => {
@@ -161,13 +192,12 @@ class ZKLibTCP {
 
   /**
    * 
-   * @param {*} command 
-   * @param {*} data 
+   * @param {integer} command 
+   * @param {string} data 
    * 
    * 
    * reject error when command fail and resolve data when success
    */
-
   executeCmd(command, data) {
     return new Promise(async (resolve, reject) => {
 
@@ -177,10 +207,11 @@ class ZKLibTCP {
       } else {
         this.replyId++
       }
+
       const buf = createTCPHeader(command, this.sessionId, this.replyId, data)
       let reply = null
 
-      try{
+      try {
         reply = await this.writeMessage(buf, command === COMMANDS.CMD_CONNECT || command === COMMANDS.CMD_EXIT)
 
         const rReply = removeTcpHeader(reply);
@@ -190,7 +221,7 @@ class ZKLibTCP {
           }
         }
         resolve(rReply)
-      }catch(err){
+      } catch (err) {
         reject(err)
       }
     })
@@ -330,7 +361,7 @@ class ZKLibTCP {
   }
 
 
-  async getSmallAttendanceLogs(){
+  async getSmallAttendanceLogs() {
 
   }
 
@@ -351,7 +382,7 @@ class ZKLibTCP {
     let data = null
     try {
       data = await this.readWithBuffer(REQUEST_DATA.GET_USERS)
- 
+
     } catch (err) {
       return Promise.reject(err)
     }
@@ -377,9 +408,9 @@ class ZKLibTCP {
       users.push(user)
       userData = userData.subarray(USER_PACKET_SIZE)
 
-      
+
     }
-    
+
     return { data: users, err: data.err }
   }
 
@@ -391,7 +422,6 @@ class ZKLibTCP {
    *  reject error when starting request data
    *  return { data: records, err: Error } when receiving requested data
    */
-
   async getAttendances(callbackInProcess = () => { }) {
 
     if (this.socket) {
@@ -417,7 +447,6 @@ class ZKLibTCP {
       }
     }
 
-
     const RECORD_PACKET_SIZE = 40
 
     let recordData = data.data.subarray(4)
@@ -433,10 +462,10 @@ class ZKLibTCP {
   }
 
   async getTime() {
-		const time = await this.executeCmd(COMMANDS.CMD_GET_TIME, '');
-		return timeParser.decode(time.readUInt32LE(8));
-	}
-  
+    const time = await this.executeCmd(COMMANDS.CMD_GET_TIME, '');
+    return timeParser.decode(time.readUInt32LE(8));
+  }
+
   async freeData() {
     return await this.executeCmd(COMMANDS.CMD_FREE_DATA, '')
   }
@@ -472,32 +501,48 @@ class ZKLibTCP {
     }
   }
 
-  async clearAttendanceLog (){
+  async clearAttendanceLog() {
     return await this.executeCmd(COMMANDS.CMD_CLEAR_ATTLOG, '')
   }
 
-  async getRealTimeLogs(cb = () => { }) {
-    this.replyId++;
-
-    const buf = createTCPHeader(COMMANDS.CMD_REG_EVENT, this.sessionId, this.replyId, Buffer.from([0x01, 0x00, 0x00, 0x00]))
-
-    this.socket.write(buf, null, err => {
-    })
-
-    this.socket.listenerCount('data') === 0 && this.socket.on('data', (data) => {
-
-      if (!checkNotEventTCP(data)) return;
-      if (data.length > 16) {
-        cb(decodeRecordRealTimeLog52(data))
-      }
-
-    })
-
+  async cancelPreviousRealTimeEvent() {
+    try {
+      return await this.executeCmd(COMMANDS.CMD_CANCELCAPTURE, '');
+    } catch (error) {
+      return Promise.reject(error)
+    }
   }
 
+  async getRealTimeLogs(cb = () => { }) {
+    try {
+      console.log("trying to remove previous real time event...");
+      await this.cancelPreviousRealTimeEvent()
+      console.log("Previous real time event removed!!!");
+
+      this.replyId++;
+      const buf = createTCPHeader(
+        COMMANDS.CMD_REG_EVENT,
+        this.sessionId,
+        this.replyId,
+        Buffer.from([0x01, 0x00, 0x00, 0x00])
+      )
+
+      this.socket.write(buf, null, err => {
+        if (err) {
+          cb(err, null)
+        }
+      })
+
+      this.socket.listenerCount('data') === 0 && this.socket.on('data', (data) => {
+        if (!checkNotEventTCP(data)) return;
+        if (data.length > 16) {
+          cb(null, decodeRecordRealTimeLog52(data))
+        }
+      })
+    } catch (error) {
+      cb(err, null)
+    }
+  }
 }
-
-
-
 
 module.exports = ZKLibTCP
