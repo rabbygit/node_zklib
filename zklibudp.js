@@ -369,12 +369,12 @@ class ZKLibUDP {
     }
 
     let data = null
-    try{
+    try {
       data = await this.readWithBuffer(REQUEST_DATA.GET_ATTENDANCE_LOGS, callbackInProcess)
-    }catch(err){
+    } catch (err) {
       return Promise.reject(err)
     }
-    
+
     if (this.socket) {
       try {
         await this.freeData()
@@ -420,9 +420,9 @@ class ZKLibUDP {
   }
 
   async getTime() {
-		const time = await this.executeCmd(COMMANDS.CMD_GET_TIME, '');
-		return timeParser.decode(time.readUInt32LE(8));
-	}
+    const time = await this.executeCmd(COMMANDS.CMD_GET_TIME, '');
+    return timeParser.decode(time.readUInt32LE(8));
+  }
 
   async getInfo() {
     const data = await this.executeCmd(COMMANDS.CMD_GET_FREE_SIZES, '')
@@ -437,7 +437,7 @@ class ZKLibUDP {
     }
   }
 
-  async clearAttendanceLog (){
+  async clearAttendanceLog() {
     return await this.executeCmd(COMMANDS.CMD_CLEAR_ATTLOG, '')
   }
 
@@ -458,8 +458,6 @@ class ZKLibUDP {
     return await this.closeSocket()
   }
 
-
-
   async getRealTimeLogs(cb = () => { }) {
     this.replyId++;
     const buf = createUDPHeader(COMMANDS.CMD_REG_EVENT, this.sessionId, this.replyId, REQUEST_DATA.GET_REAL_TIME_EVENT)
@@ -478,8 +476,5 @@ class ZKLibUDP {
 
   }
 }
-
-
-
 
 module.exports = ZKLibUDP
