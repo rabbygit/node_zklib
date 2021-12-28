@@ -1,4 +1,4 @@
-const ZKLib = require('./zklib');
+const ZKLib = require('../zklib');
 const ips = [
     '192.168.1.201',
     '192.168.1.202',

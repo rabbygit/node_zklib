@@ -1,4 +1,4 @@
-const ZKLib = require('./zklib');
+const ZKLib = require('../zklib');
 const ip = '192.168.1.201';
 
 const test = async () => {
