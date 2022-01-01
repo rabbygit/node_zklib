@@ -1,16 +1,19 @@
 const ZKLib = require('../zklib');
+// list of device ip
 const ips = [
     '192.168.1.201',
     '192.168.1.202',
     '192.168.1.246'
 ]
 
-const test = async () => {
+const realtime_attendence_multiple_device = async () => {
     for (let index = 0; index < ips.length; index++) {
         const ip = ips[index];
-        const zkInstance = new ZKLib(ip, 4370, 10000, 4000);
+        // initialization for each device ip
+        const zkInstance = new ZKLib(ip, 4370, 10000, 4000, 0);
 
         try {
+            // create connection with the device
             console.log("Trying to conenct...");
             await zkInstance.createSocket()
             console.log("Connection established!");
@@ -18,6 +21,7 @@ const test = async () => {
             console.log("Initial error", e);
         }
 
+        // register the event for each ip
         zkInstance.getRealTimeLogs((err, data) => {
             if (err) {
                 console.log('Error in registaring real time event');
@@ -30,4 +34,4 @@ const test = async () => {
     }
 }
 
-test()
+realtime_attendence_multiple_device()
