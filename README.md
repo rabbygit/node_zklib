@@ -98,7 +98,7 @@ const realtime_attendence_multiple_device = async () => {
             await zkInstance.createSocket()
             console.log("Connection established!");
         } catch (e) {
-            console.log("Initial error", e);
+            console.log("Connection error", e);
         }
 
         // register the event for each ip
