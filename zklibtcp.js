@@ -260,102 +260,101 @@ class ZKLibTCP {
       try {
         reply = await this.requestData(buf)
 
-      } catch (err) {
-        reject(err)
-      }
-
-      const header = decodeTCPHeader(reply.subarray(0, 16))
-      switch (header.commandId) {
-        case COMMANDS.CMD_DATA: {
-          resolve({ data: reply.subarray(16), mode: 8 })
-          break;
-        }
-        case COMMANDS.CMD_ACK_OK:
-        case COMMANDS.CMD_PREPARE_DATA: {
-          // this case show that data is prepared => send command to get these data 
-          // reply variable includes information about the size of following data
-          const recvData = reply.subarray(16)
-          const size = recvData.readUIntLE(1, 4)
-
-
-          // We need to split the data to many chunks to receive , because it's to large
-          // After receiving all chunk data , we concat it to TotalBuffer variable , that 's the data we want
-          let remain = size % MAX_CHUNK
-          let numberChunks = Math.round(size - remain) / MAX_CHUNK
-          let totalPackets = numberChunks + (remain > 0 ? 1 : 0)
-          let replyData = Buffer.from([])
-
-
-          let totalBuffer = Buffer.from([])
-          let realTotalBuffer = Buffer.from([])
-
-
-          const timeout = 10000
-          let timer = setTimeout(() => {
-            internalCallback(replyData, new Error('TIMEOUT WHEN RECEIVING PACKET'))
-          }, timeout)
-
-
-          const internalCallback = (replyData, err = null) => {
-            // this.socket && this.socket.removeListener('data', handleOnData)
-            timer && clearTimeout(timer)
-            resolve({ data: replyData, err })
-
+        const header = decodeTCPHeader(reply.subarray(0, 16))
+        switch (header.commandId) {
+          case COMMANDS.CMD_DATA: {
+            resolve({ data: reply.subarray(16), mode: 8 })
+            break;
           }
+          case COMMANDS.CMD_ACK_OK:
+          case COMMANDS.CMD_PREPARE_DATA: {
+            // this case show that data is prepared => send command to get these data 
+            // reply variable includes information about the size of following data
+            const recvData = reply.subarray(16)
+            const size = recvData.readUIntLE(1, 4)
 
 
-          const handleOnData = (reply) => {
+            // We need to split the data to many chunks to receive , because it's to large
+            // After receiving all chunk data , we concat it to TotalBuffer variable , that 's the data we want
+            let remain = size % MAX_CHUNK
+            let numberChunks = Math.round(size - remain) / MAX_CHUNK
+            let totalPackets = numberChunks + (remain > 0 ? 1 : 0)
+            let replyData = Buffer.from([])
 
-            if (checkNotEventTCP(reply)) return;
-            clearTimeout(timer)
-            timer = setTimeout(() => {
-              internalCallback(replyData,
-                new Error(`TIME OUT !! ${totalPackets} PACKETS REMAIN !`))
+
+            let totalBuffer = Buffer.from([])
+            let realTotalBuffer = Buffer.from([])
+
+
+            const timeout = 10000
+            let timer = setTimeout(() => {
+              internalCallback(replyData, new Error('TIMEOUT WHEN RECEIVING PACKET'))
             }, timeout)
 
-            totalBuffer = Buffer.concat([totalBuffer, reply])
-            const packetLength = totalBuffer.readUIntLE(4, 2)
-            if (totalBuffer.length >= 8 + packetLength) {
 
-              realTotalBuffer = Buffer.concat([realTotalBuffer, totalBuffer.subarray(16, 8 + packetLength)])
-              totalBuffer = totalBuffer.subarray(8 + packetLength)
+            const internalCallback = (replyData, err = null) => {
+              // this.socket && this.socket.removeListener('data', handleOnData)
+              timer && clearTimeout(timer)
+              resolve({ data: replyData, err })
 
-              if ((totalPackets > 1 && realTotalBuffer.length === MAX_CHUNK + 8)
-                || (totalPackets === 1 && realTotalBuffer.length === remain + 8)) {
+            }
 
-                replyData = Buffer.concat([replyData, realTotalBuffer.subarray(8)])
-                totalBuffer = Buffer.from([])
-                realTotalBuffer = Buffer.from([])
 
-                totalPackets -= 1
-                cb && cb(replyData.length, size)
+            const handleOnData = (reply) => {
 
-                if (totalPackets <= 0) {
-                  internalCallback(replyData)
+              if (checkNotEventTCP(reply)) return;
+              clearTimeout(timer)
+              timer = setTimeout(() => {
+                internalCallback(replyData,
+                  new Error(`TIME OUT !! ${totalPackets} PACKETS REMAIN !`))
+              }, timeout)
+
+              totalBuffer = Buffer.concat([totalBuffer, reply])
+              const packetLength = totalBuffer.readUIntLE(4, 2)
+              if (totalBuffer.length >= 8 + packetLength) {
+
+                realTotalBuffer = Buffer.concat([realTotalBuffer, totalBuffer.subarray(16, 8 + packetLength)])
+                totalBuffer = totalBuffer.subarray(8 + packetLength)
+
+                if ((totalPackets > 1 && realTotalBuffer.length === MAX_CHUNK + 8)
+                  || (totalPackets === 1 && realTotalBuffer.length === remain + 8)) {
+
+                  replyData = Buffer.concat([replyData, realTotalBuffer.subarray(8)])
+                  totalBuffer = Buffer.from([])
+                  realTotalBuffer = Buffer.from([])
+
+                  totalPackets -= 1
+                  cb && cb(replyData.length, size)
+
+                  if (totalPackets <= 0) {
+                    internalCallback(replyData)
+                  }
                 }
               }
             }
-          }
 
-          this.socket.once('close', () => {
-            internalCallback(replyData, new Error('Socket is disconnected unexpectedly'))
-          })
+            this.socket.once('close', () => {
+              internalCallback(replyData, new Error('Socket is disconnected unexpectedly'))
+            })
 
-          this.socket.on('data', handleOnData);
+            this.socket.on('data', handleOnData);
 
-          for (let i = 0; i <= numberChunks; i++) {
-            if (i === numberChunks) {
-              this.sendChunkRequest(numberChunks * MAX_CHUNK, remain)
-            } else {
-              this.sendChunkRequest(i * MAX_CHUNK, MAX_CHUNK)
+            for (let i = 0; i <= numberChunks; i++) {
+              if (i === numberChunks) {
+                this.sendChunkRequest(numberChunks * MAX_CHUNK, remain)
+              } else {
+                this.sendChunkRequest(i * MAX_CHUNK, MAX_CHUNK)
+              }
             }
-          }
 
-          break;
+            break;
+          }
+          default: {
+            reject(new Error('ERROR_IN_UNHANDLE_CMD ' + exportErrorMessage(header.commandId)))
+          }
         }
-        default: {
-          reject(new Error('ERROR_IN_UNHANDLE_CMD ' + exportErrorMessage(header.commandId)))
-        }
+      } catch (err) {
+        reject(err)
       }
     })
   }
@@ -505,7 +504,7 @@ class ZKLibTCP {
     return await this.executeCmd(COMMANDS.CMD_CLEAR_ATTLOG, '')
   }
 
-  async cancelPreviousRealTimeEvent() {
+  async cancelCapture() {
     try {
       return await this.executeCmd(COMMANDS.CMD_CANCELCAPTURE, '');
     } catch (error) {
@@ -515,9 +514,7 @@ class ZKLibTCP {
 
   async getRealTimeLogs(cb = () => { }) {
     try {
-      console.log("trying to remove previous real time event...");
-      await this.cancelPreviousRealTimeEvent()
-      console.log("Previous real time event removed!!!");
+      await this.cancelCapture()
 
       this.replyId++;
       const buf = createTCPHeader(
