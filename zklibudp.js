@@ -477,7 +477,11 @@ class ZKLibUDP {
   async getDeviceIP() {
     try {
       const reply = await this.executeCmd(COMMANDS.CMD_OPTIONS_RRQ, 'IPAddress')
-      return reply.toString('ascii').split('=')[1].split('\x00')[0]
+      const possible_ip = reply.toString('ascii').split('IPAddress=').pop()
+      if (possible_ip.endsWith('=')) {
+        return possible_ip.split('=')[0]
+      }
+      return possible_ip.split('\x00')[0]
     } catch (error) {
       return Promise.reject(error)
     }
