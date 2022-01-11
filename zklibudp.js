@@ -209,99 +209,97 @@ class ZKLibUDP {
     return new Promise(async (resolve, reject) => {
       this.replyId++;
       const buf = createUDPHeader(COMMANDS.CMD_DATA_WRRQ, this.sessionId, this.replyId, reqData)
-
-
       let reply = null
+
       try {
         reply = await this.requestData(buf)
+        const header = decodeUDPHeader(reply.subarray(0, 8))
+
+        switch (header.commandId) {
+          case COMMANDS.CMD_DATA: {
+            resolve({ data: reply.subarray(8), mode: 8, err: null })
+            break;
+          }
+          case COMMANDS.CMD_ACK_OK:
+          case COMMANDS.CMD_PREPARE_DATA: {
+            // this case show that data is prepared => send command to get these data 
+            // reply variable includes information about the size of following data 
+            const recvData = reply.subarray(8)
+            const size = recvData.readUIntLE(1, 4)
+
+            // We need to split the data to many chunks to receive , because it's to large
+            // After receiving all chunk data , we concat it to TotalBuffer variable , that 's the data we want
+            let remain = size % MAX_CHUNK
+            let numberChunks = Math.round(size - remain) / MAX_CHUNK
+
+            let totalBuffer = Buffer.from([])
+
+
+            const timeout = 3000
+            let timer = setTimeout(() => {
+              internalCallback(totalBuffer, new Error('TIMEOUT WHEN RECEIVING PACKET'))
+            }, timeout)
+
+
+            const internalCallback = (replyData, err = null) => {
+              this.socket.removeListener('message', handleOnData)
+              timer && clearTimeout(timer)
+              if (err) {
+                resolve({ err, data: replyData })
+              } else {
+                resolve({ err: null, data: replyData })
+              }
+            }
+
+
+            const handleOnData = (reply) => {
+              if (checkNotEventUDP(reply)) return;
+              clearTimeout(timer)
+              timer = setTimeout(() => {
+                internalCallback(totalBuffer,
+                  new Error(`TIMEOUT !! ${(size - totalBuffer.length) / size} % REMAIN !  `))
+              }, timeout)
+              const header = decodeUDPHeader(reply)
+
+              switch (header.commandId) {
+                case COMMANDS.CMD_PREPARE_DATA: {
+                  break;
+                }
+                case COMMANDS.CMD_DATA: {
+                  totalBuffer = Buffer.concat([totalBuffer, reply.subarray(8)])
+                  cb && cb(totalBuffer.length, size)
+                  break;
+                }
+                case COMMANDS.CMD_ACK_OK: {
+                  if (totalBuffer.length === size) {
+                    internalCallback(totalBuffer)
+                  }
+                  break;
+                }
+                default: {
+                  internalCallback([], new Error('ERROR_IN_UNHANDLE_CMD ' + exportErrorMessage(header.commandId)))
+                }
+              }
+            }
+
+            this.socket.on('message', handleOnData);
+
+            for (let i = 0; i <= numberChunks; i++) {
+              if (i === numberChunks) {
+                this.sendChunkRequest(numberChunks * MAX_CHUNK, remain)
+              } else {
+                this.sendChunkRequest(i * MAX_CHUNK, MAX_CHUNK)
+              }
+            }
+
+            break;
+          }
+          default: {
+            reject(new Error('ERROR_IN_UNHANDLE_CMD ' + exportErrorMessage(header.commandId)))
+          }
+        }
       } catch (err) {
         reject(err)
-      }
-
-      const header = decodeUDPHeader(reply.subarray(0, 8))
-
-      switch (header.commandId) {
-        case COMMANDS.CMD_DATA: {
-          resolve({ data: reply.subarray(8), mode: 8, err: null })
-          break;
-        }
-        case COMMANDS.CMD_ACK_OK:
-        case COMMANDS.CMD_PREPARE_DATA: {
-          // this case show that data is prepared => send command to get these data 
-          // reply variable includes information about the size of following data 
-          const recvData = reply.subarray(8)
-          const size = recvData.readUIntLE(1, 4)
-
-          // We need to split the data to many chunks to receive , because it's to large
-          // After receiving all chunk data , we concat it to TotalBuffer variable , that 's the data we want
-          let remain = size % MAX_CHUNK
-          let numberChunks = Math.round(size - remain) / MAX_CHUNK
-
-          let totalBuffer = Buffer.from([])
-
-
-          const timeout = 3000
-          let timer = setTimeout(() => {
-            internalCallback(totalBuffer, new Error('TIMEOUT WHEN RECEIVING PACKET'))
-          }, timeout)
-
-
-          const internalCallback = (replyData, err = null) => {
-            this.socket.removeListener('message', handleOnData)
-            timer && clearTimeout(timer)
-            if (err) {
-              resolve({ err, data: replyData })
-            } else {
-              resolve({ err: null, data: replyData })
-            }
-          }
-
-
-          const handleOnData = (reply) => {
-            if (checkNotEventUDP(reply)) return;
-            clearTimeout(timer)
-            timer = setTimeout(() => {
-              internalCallback(totalBuffer,
-                new Error(`TIMEOUT !! ${(size - totalBuffer.length) / size} % REMAIN !  `))
-            }, timeout)
-            const header = decodeUDPHeader(reply)
-
-            switch (header.commandId) {
-              case COMMANDS.CMD_PREPARE_DATA: {
-                break;
-              }
-              case COMMANDS.CMD_DATA: {
-                totalBuffer = Buffer.concat([totalBuffer, reply.subarray(8)])
-                cb && cb(totalBuffer.length, size)
-                break;
-              }
-              case COMMANDS.CMD_ACK_OK: {
-                if (totalBuffer.length === size) {
-                  internalCallback(totalBuffer)
-                }
-                break;
-              }
-              default: {
-                internalCallback([], new Error('ERROR_IN_UNHANDLE_CMD ' + exportErrorMessage(header.commandId)))
-              }
-            }
-          }
-
-          this.socket.on('message', handleOnData);
-
-          for (let i = 0; i <= numberChunks; i++) {
-            if (i === numberChunks) {
-              this.sendChunkRequest(numberChunks * MAX_CHUNK, remain)
-            } else {
-              this.sendChunkRequest(i * MAX_CHUNK, MAX_CHUNK)
-            }
-          }
-
-          break;
-        }
-        default: {
-          reject(new Error('ERROR_IN_UNHANDLE_CMD ' + exportErrorMessage(header.commandId)))
-        }
       }
     })
   }

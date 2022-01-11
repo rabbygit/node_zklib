@@ -10,20 +10,20 @@ const basic = async () => {
     console.log("Trying to conenct...");
     await zkInstance.createSocket()
     console.log("Connection established!");
+
+    // get all users
+    const users = await zkInstance.getUsers()
+    console.log(users)
+
+    // get all previous attendences
+    const attendences = await zkInstance.getAttendances()
+    console.log(attendences)
+
+    // disconnect the machine when you dont need realtime logs
+    await zkInstance.disconnect()
   } catch (e) {
-    console.log("Conection error", e);
+    console.log("Error", e);
   }
-
-  // get all users
-  const users = await zkInstance.getUsers()
-  console.log(users)
-
-  // get all previous attendences
-  const attendences = await zkInstance.getAttendances()
-  console.log(attendences)
-
-  // disconnect the machine when you dont need realtime logs
-  await zkInstance.disconnect()
 }
 
 basic()
