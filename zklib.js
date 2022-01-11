@@ -220,7 +220,12 @@ class ZKLib {
         this.timer = setTimeout(cb, timer)
     }
 
-
+    async getDeviceIP() {
+        return await this.functionWrapper(
+            () => this.zklibTcp.getDeviceIP(),
+            () => this.zklibUdp.getDeviceIP()
+        )
+    }
 
 }
 

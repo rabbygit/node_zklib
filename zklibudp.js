@@ -473,6 +473,15 @@ class ZKLibUDP {
     })
 
   }
+
+  async getDeviceIP() {
+    try {
+      const reply = await this.executeCmd(COMMANDS.CMD_OPTIONS_RRQ, 'IPAddress')
+      return reply.toString('ascii').split('=')[1].split('\x00')[0]
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  }
 }
 
 module.exports = ZKLibUDP
