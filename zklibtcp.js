@@ -23,6 +23,8 @@ class ZKLibTCP {
     this.replyId = 0
     this.socket = null
     this.password = password
+    this.next_uid = 1
+    this.next_user_id = '1'
   }
 
 
@@ -401,14 +403,26 @@ class ZKLibTCP {
     let userData = data.data.subarray(4)
 
     let users = []
+    let max_user_id = 1
 
     while (userData.length >= USER_PACKET_SIZE) {
       const user = decodeUserData72(userData.subarray(0, USER_PACKET_SIZE))
       users.push(user)
       userData = userData.subarray(USER_PACKET_SIZE)
 
+      // set max uid and user_id
+      if (user.uid > this.next_uid) {
+        this.next_uid = user.uid
+      }
 
+      if (parseInt(user.userId) > max_user_id) {
+        max_user_id = user.userId
+      }
     }
+
+    this.next_uid++
+    max_user_id++
+    this.next_user_id = String(max_user_id)
 
     return { data: users, err: data.err }
   }
@@ -549,6 +563,36 @@ class ZKLibTCP {
         return possible_ip.split('=')[0]
       }
       return possible_ip.split('\x00')[0]
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  }
+
+  async setUser(name = '', password = '', uid, user_id) {
+    try {
+      if (!uid || !user_id) {
+        await this.getUsers(); // make sure we got the last uid and user_id
+
+        if (!uid) uid = this.next_uid // set uid if not passed
+        if (!user_id) user_id = this.next_user_id // set user_id if not passed
+      }
+
+      const command_string = Buffer.alloc(72);
+
+      command_string.writeUInt16LE(uid, 0);
+      command_string[2] = 0;
+      command_string.write(password, 3, 11);
+      command_string.write(name, 11, 39);
+      command_string[39] = 1;
+      command_string.writeUInt32LE(0, 40);
+      command_string.write(user_id.toString(10), 48);
+
+      // execute command
+      await this.executeCmd(COMMANDS.CMD_USER_WRQ, command_string);
+
+      // increase the uid and user_id
+      this.next_uid++
+      this.next_user_id = String(parseInt(this.next_user_id) + 1)
     } catch (error) {
       return Promise.reject(error)
     }

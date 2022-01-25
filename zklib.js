@@ -227,6 +227,12 @@ class ZKLib {
         )
     }
 
+    async setUser(name = '', password = '', uid, user_id) {
+        return await this.functionWrapper(
+            () => this.zklibTcp.setUser(name, password, uid, user_id),
+            () => this.zklibUdp.setUser()
+        )
+    }
 }
 
 
