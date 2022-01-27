@@ -1,7 +1,7 @@
 const ZKLib = require('../zklib');
 const ip = '192.168.1.201'; // device ip
 
-const basic = async () => {
+const user = async () => {
   // initialization
   const zkInstance = new ZKLib(ip, 4370, 10000, 4000, 0);
 
@@ -34,4 +34,4 @@ const basic = async () => {
   }
 }
 
-basic()
+user()
