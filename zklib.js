@@ -233,6 +233,13 @@ class ZKLib {
             () => this.zklibUdp.setUser()
         )
     }
+
+    async deleteUser(uid) {
+        return await this.functionWrapper(
+            () => this.zklibTcp.deleteUser(uid),
+            () => this.zklibUdp.deleteUser(uid)
+        )
+    }
 }
 
 

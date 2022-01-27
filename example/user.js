@@ -11,10 +11,20 @@ const basic = async () => {
     await zkInstance.createSocket()
     console.log("Connection established!");
 
-    // get all previous attendences
+    // set new user
     await zkInstance.enableDevice()
-    const attendences = await zkInstance.getAttendances()
-    console.log(attendences)
+    await zkInstance.setUser('TEST_USER', 'password')
+    await zkInstance.disableDevice()
+
+    // get all users
+    await zkInstance.enableDevice()
+    const users = await zkInstance.getUsers()
+    console.log(users)
+    await zkInstance.disableDevice()
+
+    // delete a user
+    await zkInstance.enableDevice()
+    await zkInstance.deleteUser(2065)
     await zkInstance.disableDevice()
 
     // disconnect the machine when you dont need realtime logs

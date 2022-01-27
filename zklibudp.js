@@ -339,24 +339,32 @@ class ZKLibUDP {
     let userData = data.data.subarray(4)
     let users = []
     let max_user_id = 1
+    let max_uid = 1
 
     while (userData.length >= USER_PACKET_SIZE) {
       const user = decodeUserData28(userData.subarray(0, USER_PACKET_SIZE))
       users.push(user)
       userData = userData.subarray(USER_PACKET_SIZE)
+
       // set max uid and user_id
-      if (user.uid > this.next_uid) {
-        this.next_uid = user.uid
+      if (user.uid > max_uid) {
+        max_uid = user.uid
       }
 
-      if (parseInt(user.userId) > max_user_id) {
-        max_user_id = user.userId
+      let user_id = parseInt(user.userId)
+      if (user_id > max_user_id) {
+        max_user_id = user_id
       }
     }
 
-    this.next_uid++
-    max_user_id++
-    this.next_user_id = String(max_user_id)
+    if (max_uid >= this.next_uid) {
+      this.next_uid = max_uid + 1
+    }
+
+    if (max_user_id >= parseInt(this.next_user_id)) {
+      max_user_id++
+      this.next_user_id = String(max_user_id)
+    }
 
     return { data: users, err: data.err }
   }
@@ -369,8 +377,6 @@ class ZKLibUDP {
    *  reject error when starting request data
    *  return { data: records, err: Error } when receiving requested data
    */
-
-
   async getAttendances(callbackInProcess = () => { }) {
     if (this.socket) {
       try {
@@ -425,8 +431,6 @@ class ZKLibUDP {
 
   }
 
-
-
   async freeData() {
     return await this.executeCmd(COMMANDS.CMD_FREE_DATA, '')
   }
@@ -452,7 +456,6 @@ class ZKLibUDP {
   async clearAttendanceLog() {
     return await this.executeCmd(COMMANDS.CMD_CLEAR_ATTLOG, '')
   }
-
 
   async disableDevice() {
     return await this.executeCmd(COMMANDS.CMD_DISABLEDEVICE, REQUEST_DATA.DISABLE_DEVICE)
@@ -526,6 +529,24 @@ class ZKLibUDP {
       // increase the uid and user_id
       this.next_uid++
       this.next_user_id = String(parseInt(this.next_user_id) + 1)
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  }
+
+  async deleteUser(uid) {
+    try {
+      if (!uid) {
+        throw new Error('uid is required')
+      }
+
+      const command_string = Buffer.alloc(2);
+      command_string.writeUInt16LE(uid, 0);
+      await this.executeCmd(COMMANDS.CMD_DELETE_USER, command_string);
+
+      // decrease the uid and user_id
+      this.next_uid--
+      this.next_user_id = String(parseInt(this.next_user_id) - 1)
     } catch (error) {
       return Promise.reject(error)
     }
