@@ -76,6 +76,7 @@ class ZKLib {
 
                 try {
                     await this.zklibTcp.connect();
+                    this.zklibTcp.keepAlive();
                     console.log('ok tcp')
                 } catch (err) {
                     throw err;
@@ -102,9 +103,6 @@ class ZKLib {
                 console.log('ok udp')
                 this.connectionType = 'udp'
             } catch (err) {
-
-
-
                 if (err.code !== 'EADDRINUSE') {
                     this.connectionType = null
                     try {

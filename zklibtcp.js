@@ -25,6 +25,7 @@ class ZKLibTCP {
     this.password = password
     this.next_uid = 1
     this.next_user_id = '1'
+    this.initialDelay = 3000 // 3s
   }
 
   createSocket(cbError, cbClose) {
@@ -79,6 +80,10 @@ class ZKLibTCP {
         reject(err)
       }
     })
+  }
+
+  keepAlive() {
+    this.socket.setKeepAlive(true, this.initialDelay);
   }
 
   authenticate() {
